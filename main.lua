@@ -1,398 +1,660 @@
-if _G.MaceConfig and _G.MaceConfig.ScreenGui then
-    _G.MaceConfig.ScreenGui:Destroy()
-end
-
-_G.MaceConfig = {
-    KillAura = { Enabled = false, Range = 15 },
-    AutoBlock = { Enabled = false },
-    Speed = { Enabled = false, Value = 22 },
-    ActiveTab = "None",
-    ScreenGui = nil,
-    MainPanel = nil,
-    AllUiElements = {},
-    TextLabels = {},
-    TWEEN_INFO = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-}
+--// Agues 5.0
+--// Помести этот LocalScript в StarterPlayer > StarterPlayerScripts
 
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-
-print("[Mace PVP]: Часть 1 (Core) успешно запущена!")
-
-task.spawn(function()
-    while task.wait(0.1) do
-        local config = _G.MaceConfig
-        if config and config.KillAura.Enabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local myHrp = LocalPlayer.Character.HumanoidRootPart
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    local targetHrp = player.Character.HumanoidRootPart
-                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                    
-                    if humanoid and humanoid.Health > 0 then
-                        local distance = (myHrp.Position - targetHrp.Position).Magnitude
-                        if distance <= config.KillAura.Range then
-                            local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                            if tool then tool:Activate() end
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
-local config = _G.MaceConfig
 
-if not config then 
-    warn("[Mace PVP Error]: Сначала запусти Часть 1!") 
-    return 
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local oldGui = playerGui:FindFirstChild("Agues5Menu")
+if oldGui then
+	oldGui:Destroy()
 end
 
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "MacePvp_UniversalSuite"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.IgnoreGuiInset = true 
-ScreenGui.Parent = CoreGui
-config.ScreenGui = ScreenGui
+local destroyed = false
+local expanded = false
+local confirmationOpen = false
+local mouseInside = false
+local connections = {}
 
-local CLOSED_WIDTH = 55
-local OPEN_WIDTH = 160
-local PANEL_HEIGHT = 520
-
-local MainPanel = Instance.new("Frame")
-MainPanel.Name = "SidebarContainer"
-MainPanel.Position = UDim2.new(0, 10, 0.5, 0) 
-MainPanel.Size = UDim2.new(0, CLOSED_WIDTH, 0, PANEL_HEIGHT)
-MainPanel.AnchorPoint = Vector2.new(0, 0.5)
-MainPanel.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-MainPanel.BorderSizePixel = 1
-MainPanel.BorderColor3 = Color3.fromRGB(255, 255, 255)
-MainPanel.ClipsDescendants = true 
-MainPanel.Active = true
-MainPanel.BackgroundTransparency = 1 
-MainPanel.Parent = ScreenGui
-config.MainPanel = MainPanel
-
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 16)
-MainCorner.Parent = MainPanel
-
--- Анимация поршня + динамическое переключение текста шапки
-MainPanel.MouseEnter:Connect(function()
-    TweenService:Create(MainPanel, config.TWEEN_INFO, {Size = UDim2.new(0, OPEN_WIDTH, 0, PANEL_HEIGHT)}):Play()
-    
-    local LogoButton = MainPanel:FindFirstChild("Logo")
-    local LogoLabel = LogoButton and LogoButton:FindFirstChild("CustomIcon")
-    if LogoButton and LogoLabel then 
-        LogoButton.Size = UDim2.new(0, OPEN_WIDTH, 0, 45)
-        LogoLabel.Size = UDim2.new(0, OPEN_WIDTH, 1, 0)
-        LogoLabel.Text = "Agues 5.0" 
-        LogoLabel.TextSize = 18 
-    end
-    
-    for _, label in ipairs(config.TextLabels) do 
-        TweenService:Create(label, config.TWEEN_INFO, {TextTransparency = 0}):Play() 
-    end
-end)
-
-MainPanel.MouseLeave:Connect(function()
-    TweenService:Create(MainPanel, config.TWEEN_INFO, {Size = UDim2.new(0, CLOSED_WIDTH, 0, PANEL_HEIGHT)}):Play()
-    
-    local LogoButton = MainPanel:FindFirstChild("Logo")
-    local LogoLabel = LogoButton and LogoButton:FindFirstChild("CustomIcon")
-    if LogoButton and LogoLabel then 
-        LogoButton.Size = UDim2.new(0, CLOSED_WIDTH, 0, 45)
-        LogoLabel.Size = UDim2.new(0, CLOSED_WIDTH, 1, 0)
-        LogoLabel.Text = "A" 
-        LogoLabel.TextSize = 28 
-    end
-    
-    for _, label in ipairs(config.TextLabels) do 
-        TweenService:Create(label, config.TWEEN_INFO, {TextTransparency = 1}):Play() 
-    end
-end)
-
-print("[Mace PVP]: Часть 2 (Sidebar с фиксом логотипа) успешно создана!")
-local config = _G.MaceConfig
-
-if not config or not config.MainPanel then 
-    warn("[Mace PVP Error]: Сначала запусти Части 1 и 2!") 
-    return 
+local function connect(signal, callback)
+	local connection = signal:Connect(callback)
+	table.insert(connections, connection)
+	return connection
 end
 
-local tabs = {
-    {"A", "Logo"}, {"×", "Close"}, {"👁", "Visual"}, {"⚔", "Combat"}, 
-    {"⚙", "Movement"}, {"🎯", "Aim Assist"}, {"📦", "Player"}, 
-    {"🛡", "Render"}, {"⚡", "Utility"}, {"⭐", "Automatic"}, {"⌥", "Misc"}        
+local function new(className, properties, parent)
+	local object = Instance.new(className)
+
+	for property, value in pairs(properties) do
+		object[property] = value
+	end
+
+	object.Parent = parent
+	return object
+end
+
+local function tween(object, info, properties)
+	if object and object.Parent then
+		return TweenService:Create(object, info, properties)
+	end
+end
+
+local expandTween = TweenInfo.new(
+	0.24,
+	Enum.EasingStyle.Quart,
+	Enum.EasingDirection.Out
+)
+
+local smallTween = TweenInfo.new(
+	0.16,
+	Enum.EasingStyle.Quad,
+	Enum.EasingDirection.Out
+)
+
+local collapsedWidth = 58
+local expandedWidth = 210
+local panelHeight = 370
+local leftPosition = 18
+
+local collapsedSize = UDim2.fromOffset(collapsedWidth, panelHeight)
+local expandedSize = UDim2.fromOffset(expandedWidth, panelHeight)
+
+-- Главное ScreenGui
+local gui = new("ScreenGui", {
+	Name = "Agues5Menu",
+	ResetOnSpawn = false,
+	IgnoreGuiInset = true,
+	DisplayOrder = 100,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+}, playerGui)
+
+-- Тень панели
+local shadow = new("Frame", {
+	Name = "Shadow",
+	AnchorPoint = Vector2.new(0, 0.5),
+	Position = UDim2.new(0, leftPosition + 3, 0.5, 4),
+	Size = collapsedSize,
+	BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+	BackgroundTransparency = 0.35,
+	BorderSizePixel = 0,
+	ZIndex = 1
+}, gui)
+
+new("UICorner", {
+	CornerRadius = UDim.new(0, 8)
+}, shadow)
+
+-- Основная панель слева по центру
+local panel = new("Frame", {
+	Name = "Panel",
+	AnchorPoint = Vector2.new(0, 0.5),
+	Position = UDim2.new(0, leftPosition, 0.5, 0),
+	Size = collapsedSize,
+	BackgroundColor3 = Color3.fromRGB(3, 3, 3),
+	BorderSizePixel = 0,
+	ClipsDescendants = true,
+	Active = true,
+	ZIndex = 2
+}, gui)
+
+new("UICorner", {
+	CornerRadius = UDim.new(0, 8)
+}, panel)
+
+new("UIStroke", {
+	Color = Color3.fromRGB(225, 225, 225),
+	Thickness = 1,
+	Transparency = 0.05
+}, panel)
+
+-- Верхняя буква A
+local logo = new("TextLabel", {
+	Name = "Logo",
+	Position = UDim2.fromOffset(6, 5),
+	Size = UDim2.fromOffset(42, 38),
+	BackgroundTransparency = 1,
+	Text = "A",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	TextSize = 27,
+	Font = Enum.Font.GothamBold,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	TextYAlignment = Enum.TextYAlignment.Center,
+	ZIndex = 5
+}, panel)
+
+-- Продолжение названия. Вместе с A получается Agues 5.0
+local title = new("TextLabel", {
+	Name = "Title",
+	Position = UDim2.fromOffset(50, 5),
+	Size = UDim2.fromOffset(87, 38),
+	BackgroundTransparency = 1,
+	Text = "gues 5.0",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	TextSize = 16,
+	Font = Enum.Font.GothamMedium,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextYAlignment = Enum.TextYAlignment.Center,
+	TextTransparency = 1,
+	Visible = false,
+	ZIndex = 5
+}, panel)
+
+-- Крестик расположен отдельно справа и выровнен по центру кнопки
+local closeButton = new("TextButton", {
+	Name = "CloseButton",
+	Position = UDim2.new(1, -38, 0, 8),
+	Size = UDim2.fromOffset(28, 28),
+	BackgroundColor3 = Color3.fromRGB(5, 5, 5),
+	BorderSizePixel = 0,
+	Text = "×",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	TextSize = 22,
+	Font = Enum.Font.GothamMedium,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	TextYAlignment = Enum.TextYAlignment.Center,
+	AutoButtonColor = false,
+	Visible = false,
+	ZIndex = 7
+}, panel)
+
+new("UICorner", {
+	CornerRadius = UDim.new(0, 5)
+}, closeButton)
+
+new("UIStroke", {
+	Color = Color3.fromRGB(210, 210, 210),
+	Thickness = 1,
+	Transparency = 0.05
+}, closeButton)
+
+-- Линия под заголовком
+new("Frame", {
+	Name = "HeaderLine",
+	Position = UDim2.fromOffset(1, 50),
+	Size = UDim2.new(1, -2, 0, 1),
+	BackgroundColor3 = Color3.fromRGB(220, 220, 220),
+	BorderSizePixel = 0,
+	ZIndex = 4
+}, panel)
+
+-- Список функций
+local functionsFrame = new("Frame", {
+	Name = "Functions",
+	Position = UDim2.fromOffset(6, 61),
+	Size = UDim2.new(1, -12, 1, -68),
+	BackgroundTransparency = 1,
+	ZIndex = 3
+}, panel)
+
+new("UIListLayout", {
+	FillDirection = Enum.FillDirection.Vertical,
+	HorizontalAlignment = Enum.HorizontalAlignment.Center,
+	VerticalAlignment = Enum.VerticalAlignment.Top,
+	Padding = UDim.new(0, 4),
+	SortOrder = Enum.SortOrder.LayoutOrder
+}, functionsFrame)
+
+local functionNames = {
+	"Visual",
+	"Combat",
+	"Movement",
+	"Aim Assist",
+	"Player",
+	"Render",
+	"Utility",
+	"Automatic",
+	"Misc"
 }
 
-for i, tabData in ipairs(tabs) do
-    local iconSymbol = tabData[1]
-    local funcName = tabData[2]
-    local isHeader = (i == 1 or i == 2)
-    
-    local TabButton = Instance.new("TextButton")
-    TabButton.Name = funcName
-    -- Изначально ставим логотип в размер закрытой панели, чтобы буква А была строго по центру
-    TabButton.Size = (i == 1) and UDim2.new(0, 55, 0, 45) or (isHeader and UDim2.new(1, 0, 0, 45) or UDim2.new(0.9, 0, 0, 38))
-    TabButton.Position = isHeader and UDim2.new(0, 0, 0, (i-1)*45) or UDim2.new(0.05, 0, 0, 95 + (i-3)*43)
-    TabButton.BackgroundColor3 = isHeader and Color3.fromRGB(10, 10, 10) or Color3.fromRGB(15, 15, 15)
-    TabButton.BorderSizePixel = isHeader and 0 or 1
-    TabButton.BorderColor3 = Color3.fromRGB(60, 60, 60)
-    TabButton.Text = ""
-    TabButton.AutoButtonColor = false
-    TabButton.BackgroundTransparency = 1
-    TabButton.Parent = config.MainPanel
-    table.insert(config.AllUiElements, {instance = TabButton, defaultTrans = 0})
-    
-    local buttonCorner = Instance.new("UICorner")
-    buttonCorner.CornerRadius = UDim.new(0, 10)
-    buttonCorner.Parent = TabButton
+local icons = {
+	"◉",
+	"◆",
+	"↕",
+	"⊙",
+	"●",
+	"◐",
+	"ϟ",
+	"★",
+	"☷"
+}
 
-    if i == 2 then
-        local Line = Instance.new("Frame")
-        Line.Size = UDim2.new(1, 0, 0, 1)
-        Line.Position = UDim2.new(0, 0, 0, 44)
-        Line.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-        Line.BorderSizePixel = 0
-        Line.BackgroundTransparency = 1
-        Line.Parent = TabButton
-        table.insert(config.AllUiElements, {instance = Line, defaultTrans = 0})
-    end
+local buttons = {}
 
-    local CustomIcon = Instance.new("TextLabel")
-    CustomIcon.Name = "CustomIcon"
-    CustomIcon.BackgroundTransparency = 1
-    CustomIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
-    CustomIcon.Text = iconSymbol
-    CustomIcon.TextTransparency = 1
-    CustomIcon.Parent = TabButton
-    table.insert(config.AllUiElements, {instance = CustomIcon, defaultTrans = 0})
-    
-    if i == 1 then
-        CustomIcon.Size = UDim2.new(0, 55, 1, 0)
-        CustomIcon.Position = UDim2.new(0, 0, 0, 0)
-        CustomIcon.Font = Enum.Font.FredokaOne
-        CustomIcon.TextSize = 28
-        CustomIcon.TextXAlignment = Enum.TextXAlignment.Center
-    elseif i == 2 then
-        CustomIcon.Size = UDim2.new(1, 0, 1, 0)
-        CustomIcon.Font = Enum.Font.GothamBold
-        CustomIcon.TextSize = 20
-    else
-        CustomIcon.Size = UDim2.new(0, 24, 0, 24)
-        CustomIcon.Position = UDim2.new(0, 15, 0.5, 0)
-        CustomIcon.AnchorPoint = Vector2.new(0, 0.5)
-        CustomIcon.Font = Enum.Font.GothamMedium
-        CustomIcon.TextSize = 16
-    end
-    
-    if not isHeader then
-        local Label = Instance.new("TextLabel")
-        Label.Size = UDim2.new(0, 80, 1, 0)
-        Label.Position = UDim2.new(0, 48, 0, 0)
-        Label.BackgroundTransparency = 1
-        Label.Text = funcName
-        Label.TextColor3 = Color3.fromRGB(230, 230, 230)
-        Label.TextSize = 13
-        Label.Font = Enum.Font.GothamMedium
-        Label.TextXAlignment = Enum.TextXAlignment.Left
-        Label.TextTransparency = 1 
-        Label.Parent = TabButton
-        
-        local Arrow = Instance.new("TextLabel")
-        Arrow.Size = UDim2.new(0, 15, 1, 0)
-        Arrow.Position = UDim2.new(1, -20, 0, 0)
-        Arrow.BackgroundTransparency = 1
-        Arrow.Text = ">"
-        Arrow.TextColor3 = Color3.fromRGB(150, 150, 150)
-        Arrow.TextSize = 12
-        Arrow.Font = Enum.Font.GothamBold
-        Arrow.TextXAlignment = Enum.TextXAlignment.Right
-        Arrow.TextTransparency = 1 
-        Arrow.Parent = TabButton
+local function addHover(button, normalColor, hoverColor)
+	connect(button.MouseEnter, function()
+		if destroyed then
+			return
+		end
 
-        table.insert(config.TextLabels, Label)
-        table.insert(config.TextLabels, Arrow)
-    end
+		tween(button, smallTween, {
+			BackgroundColor3 = hoverColor
+		}):Play()
+	end)
+
+	connect(button.MouseLeave, function()
+		if destroyed then
+			return
+		end
+
+		tween(button, smallTween, {
+			BackgroundColor3 = normalColor
+		}):Play()
+	end)
 end
 
-print("[Mace PVP]: Часть 3 (Tabs с фиксом логотипа) успешно сгенерирована!")
-local config = _G.MaceConfig
+for index, name in ipairs(functionNames) do
+	local button = new("TextButton", {
+		Name = name:gsub("%s+", ""),
+		LayoutOrder = index,
+		Size = UDim2.new(1, 0, 0, 27),
+		BackgroundColor3 = Color3.fromRGB(5, 5, 5),
+		BorderSizePixel = 0,
+		Text = "",
+		AutoButtonColor = false,
+		ZIndex = 4
+	}, functionsFrame)
 
-if not config or not config.ScreenGui then 
-    warn("[Mace PVP Error]: Сначала запусти Часть 1!") 
-    return 
+	new("UICorner", {
+		CornerRadius = UDim.new(0, 5)
+	}, button)
+
+	new("UIStroke", {
+		Color = Color3.fromRGB(205, 205, 205),
+		Thickness = 0.8,
+		Transparency = 0.08
+	}, button)
+
+	local icon = new("TextLabel", {
+		Name = "Icon",
+		Position = UDim2.new(0.5, -14, 0, 0),
+		Size = UDim2.fromOffset(28, 27),
+		BackgroundTransparency = 1,
+		Text = icons[index],
+		TextColor3 = Color3.fromRGB(255, 255, 255),
+		TextSize = 16,
+		Font = Enum.Font.GothamMedium,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextYAlignment = Enum.TextYAlignment.Center,
+		ZIndex = 5
+	}, button)
+
+	local text = new("TextLabel", {
+		Name = "FunctionName",
+		Position = UDim2.fromOffset(38, 0),
+		Size = UDim2.new(1, -65, 1, 0),
+		BackgroundTransparency = 1,
+		Text = name,
+		TextColor3 = Color3.fromRGB(245, 245, 245),
+		TextSize = 11,
+		Font = Enum.Font.GothamMedium,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Center,
+		TextTransparency = 1,
+		Visible = false,
+		ZIndex = 5
+	}, button)
+
+	local arrow = new("TextLabel", {
+		Name = "Arrow",
+		Position = UDim2.new(1, -23, 0, 0),
+		Size = UDim2.fromOffset(18, 27),
+		BackgroundTransparency = 1,
+		Text = "›",
+		TextColor3 = Color3.fromRGB(255, 255, 255),
+		TextSize = 18,
+		Font = Enum.Font.GothamMedium,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextYAlignment = Enum.TextYAlignment.Center,
+		TextTransparency = 1,
+		Visible = false,
+		ZIndex = 5
+	}, button)
+
+	buttons[index] = {
+		Button = button,
+		Icon = icon,
+		Text = text,
+		Arrow = arrow
+	}
+
+	addHover(
+		button,
+		Color3.fromRGB(5, 5, 5),
+		Color3.fromRGB(28, 28, 28)
+	)
+
+	connect(button.MouseButton1Click, function()
+		print("Selected function: " .. name)
+	end)
 end
 
-local PromptFrame = Instance.new("Frame")
-PromptFrame.Name = "ClosePrompt"
-PromptFrame.Size = UDim2.new(0, 260, 0, 130)
-PromptFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-PromptFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-PromptFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
-PromptFrame.BorderSizePixel = 1
-PromptFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
-PromptFrame.Visible = false
-PromptFrame.BackgroundTransparency = 1
-PromptFrame.Parent = config.ScreenGui
+-- Отдельное окно подтверждения.
+-- Оно находится НЕ внутри панели, поэтому всегда будет по центру экрана.
+local confirmationLayer = new("Frame", {
+	Name = "ConfirmationLayer",
+	Position = UDim2.fromScale(0, 0),
+	Size = UDim2.fromScale(1, 1),
+	BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	Visible = false,
+	Active = true,
+	ZIndex = 50
+}, gui)
 
--- Сильное закругление окна подтверждения
-Instance.new("UICorner", PromptFrame).CornerRadius = UDim.new(0, 16)
+local confirmationCard = new("Frame", {
+	Name = "ConfirmationCard",
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.5),
+	Size = UDim2.fromOffset(310, 174),
+	BackgroundColor3 = Color3.fromRGB(10, 10, 10),
+	BorderSizePixel = 0,
+	ZIndex = 51
+}, confirmationLayer)
 
-local PromptText = Instance.new("TextLabel")
-PromptText.Size = UDim2.new(1, 0, 0, 50)
-PromptText.Position = UDim2.new(0, 0, 0, 15)
-PromptText.BackgroundTransparency = 1
-PromptText.Text = "Are you sure you want to close?"
-PromptText.TextColor3 = Color3.fromRGB(255, 255, 255)
-PromptText.TextSize = 14
-PromptText.Font = Enum.Font.GothamMedium
-PromptText.TextTransparency = 1
-PromptText.Parent = PromptFrame
+new("UICorner", {
+	CornerRadius = UDim.new(0, 8)
+}, confirmationCard)
 
-local YesBtn = Instance.new("TextButton")
-YesBtn.Name = "Yes"
-YesBtn.Size = UDim2.new(0, 100, 0, 35)
-YesBtn.Position = UDim2.new(0, 20, 1, -50)
-YesBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-YesBtn.BorderSizePixel = 1
-YesBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
-YesBtn.Text = "Yes"
-YesBtn.TextColor3 = Color3.fromRGB(255, 70, 70)
-YesBtn.Font = Enum.Font.GothamBold
-YesBtn.TextSize = 13
-YesBtn.BackgroundTransparency = 1
-YesBtn.TextTransparency = 1
-YesBtn.Parent = PromptFrame
-Instance.new("UICorner", YesBtn).CornerRadius = UDim.new(0, 10)
+new("UIStroke", {
+	Color = Color3.fromRGB(230, 230, 230),
+	Thickness = 1.1,
+	Transparency = 0.02
+}, confirmationCard)
 
-local CancelBtn = Instance.new("TextButton")
-CancelBtn.Name = "Cancel"
-CancelBtn.Size = UDim2.new(0, 100, 0, 35)
-CancelBtn.Position = UDim2.new(1, -120, 1, -50)
-CancelBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-CancelBtn.BorderSizePixel = 1
-CancelBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
-CancelBtn.Text = "Cancel"
-CancelBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-CancelBtn.Font = Enum.Font.GothamMedium
-CancelBtn.TextSize = 13
-CancelBtn.BackgroundTransparency = 1
-CancelBtn.TextTransparency = 1
-CancelBtn.Parent = PromptFrame
-Instance.new("UICorner", CancelBtn).CornerRadius = UDim.new(0, 10)
+local confirmationTitle = new("TextLabel", {
+	Name = "ConfirmationTitle",
+	Position = UDim2.fromOffset(15, 16),
+	Size = UDim2.new(1, -30, 0, 25),
+	BackgroundTransparency = 1,
+	Text = "Close Agues 5.0?",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	TextSize = 17,
+	Font = Enum.Font.GothamBold,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	TextYAlignment = Enum.TextYAlignment.Center,
+	ZIndex = 52
+}, confirmationCard)
 
-print("[Mace PVP]: Часть 4 (Prompt Frame) успешно создана!")
-local TweenService = game:GetService("TweenService")
-local config = _G.MaceConfig
+local confirmationText = new("TextLabel", {
+	Name = "ConfirmationText",
+	Position = UDim2.fromOffset(15, 49),
+	Size = UDim2.new(1, -30, 0, 40),
+	BackgroundTransparency = 1,
+	Text = "Are you sure you want to close?",
+	TextColor3 = Color3.fromRGB(225, 225, 225),
+	TextSize = 14,
+	Font = Enum.Font.GothamMedium,
+	TextWrapped = true,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	TextYAlignment = Enum.TextYAlignment.Center,
+	ZIndex = 52
+}, confirmationCard)
 
-if not config or not config.MainPanel then 
-    warn("[Mace PVP Error]: Ошибка инициализации финального контроллера!") 
-    return 
+local cancelButton = new("TextButton", {
+	Name = "Cancel",
+	Position = UDim2.fromOffset(15, 116),
+	Size = UDim2.new(0.5, -22, 0, 38),
+	BackgroundColor3 = Color3.fromRGB(5, 5, 5),
+	BorderSizePixel = 0,
+	Text = "Cancel",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	TextSize = 13,
+	Font = Enum.Font.GothamMedium,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	TextYAlignment = Enum.TextYAlignment.Center,
+	AutoButtonColor = false,
+	ZIndex = 52
+}, confirmationCard)
+
+new("UICorner", {
+	CornerRadius = UDim.new(0, 6)
+}, cancelButton)
+
+new("UIStroke", {
+	Color = Color3.fromRGB(210, 210, 210),
+	Thickness = 1,
+	Transparency = 0.05
+}, cancelButton)
+
+local yesButton = new("TextButton", {
+	Name = "Yes",
+	Position = UDim2.new(0.5, 7, 0, 116),
+	Size = UDim2.new(0.5, -22, 0, 38),
+	BackgroundColor3 = Color3.fromRGB(35, 35, 35),
+	BorderSizePixel = 0,
+	Text = "Yes",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	TextSize = 13,
+	Font = Enum.Font.GothamBold,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	TextYAlignment = Enum.TextYAlignment.Center,
+	AutoButtonColor = false,
+	ZIndex = 52
+}, confirmationCard)
+
+new("UICorner", {
+	CornerRadius = UDim.new(0, 6)
+}, yesButton)
+
+new("UIStroke", {
+	Color = Color3.fromRGB(230, 230, 230),
+	Thickness = 1,
+	Transparency = 0.05
+}, yesButton)
+
+addHover(cancelButton, Color3.fromRGB(5, 5, 5), Color3.fromRGB(30, 30, 30))
+addHover(yesButton, Color3.fromRGB(35, 35, 35), Color3.fromRGB(60, 60, 60))
+addHover(closeButton, Color3.fromRGB(5, 5, 5), Color3.fromRGB(30, 30, 30))
+
+local function expandMenu()
+	if destroyed or expanded then
+		return
+	end
+
+	expanded = true
+
+	title.Visible = true
+	closeButton.Visible = true
+
+	tween(panel, expandTween, {
+		Size = expandedSize
+	}):Play()
+
+	tween(shadow, expandTween, {
+		Size = expandedSize
+	}):Play()
+
+	tween(title, expandTween, {
+		TextTransparency = 0
+	}):Play()
+
+	for _, data in ipairs(buttons) do
+		data.Text.Visible = true
+		data.Arrow.Visible = true
+
+		tween(data.Icon, expandTween, {
+			Position = UDim2.fromOffset(5, 0)
+		}):Play()
+
+		tween(data.Text, expandTween, {
+			TextTransparency = 0
+		}):Play()
+
+		tween(data.Arrow, expandTween, {
+			TextTransparency = 0
+		}):Play()
+	end
 end
 
-local MainPanel = config.MainPanel
-local PromptFrame = MainPanel.Parent:FindFirstChild("ClosePrompt")
-local PromptText = PromptFrame and PromptFrame:FindFirstChild("TextLabel")
-local YesBtn = PromptFrame and PromptFrame:FindFirstChild("Yes")
-local CancelBtn = PromptFrame and PromptFrame:FindFirstChild("Cancel")
+local function collapseMenu()
+	if destroyed or not expanded or confirmationOpen then
+		return
+	end
 
-local function fadeUI(mode)
-    local target = (mode == "open") and 0 or 1
-    TweenService:Create(MainPanel, config.TWEEN_INFO, {BackgroundTransparency = target}):Play()
-    for _, item in ipairs(config.AllUiElements) do
-        if item.instance:IsA("TextButton") or item.instance:IsA("Frame") then
-            TweenService:Create(item.instance, config.TWEEN_INFO, {BackgroundTransparency = target == 1 and 1 or item.defaultTrans}):Play()
-        end
-        if item.instance:IsA("TextLabel") then
-            TweenService:Create(item.instance, config.TWEEN_INFO, {TextTransparency = target == 1 and 1 or item.defaultTrans}):Play()
-        end
-    end
+	expanded = false
+
+	tween(panel, expandTween, {
+		Size = collapsedSize
+	}):Play()
+
+	tween(shadow, expandTween, {
+		Size = collapsedSize
+	}):Play()
+
+	tween(title, expandTween, {
+		TextTransparency = 1
+	}):Play()
+
+	tween(closeButton, expandTween, {
+		TextTransparency = 1
+	}):Play()
+
+	for _, data in ipairs(buttons) do
+		tween(data.Icon, expandTween, {
+			Position = UDim2.new(0.5, -14, 0, 0)
+		}):Play()
+
+		tween(data.Text, expandTween, {
+			TextTransparency = 1
+		}):Play()
+
+		tween(data.Arrow, expandTween, {
+			TextTransparency = 1
+		}):Play()
+	end
+
+	task.delay(0.25, function()
+		if destroyed or expanded then
+			return
+		end
+
+		title.Visible = false
+		closeButton.Visible = false
+
+		for _, data in ipairs(buttons) do
+			data.Text.Visible = false
+			data.Arrow.Visible = false
+		end
+	end)
 end
 
-local function togglePrompt(open)
-    if not PromptFrame then return end
-    if open then
-        PromptFrame.Visible = true
-        TweenService:Create(PromptFrame, config.TWEEN_INFO, {BackgroundTransparency = 0}):Play()
-        TweenService:Create(PromptText, config.TWEEN_INFO, {TextTransparency = 0}):Play()
-        TweenService:Create(YesBtn, config.TWEEN_INFO, {BackgroundTransparency = 0, TextTransparency = 0}):Play()
-        TweenService:Create(CancelBtn, config.TWEEN_INFO, {BackgroundTransparency = 0, TextTransparency = 0}):Play()
-    else
-        local tween = TweenService:Create(PromptFrame, config.TWEEN_INFO, {BackgroundTransparency = 1})
-        TweenService:Create(PromptText, config.TWEEN_INFO, {TextTransparency = 1}):Play()
-        TweenService:Create(YesBtn, config.TWEEN_INFO, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
-        TweenService:Create(CancelBtn, config.TWEEN_INFO, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
-        tween:Play()
-        tween.Completed:Connect(function() PromptFrame.Visible = false end)
-    end
+local function openConfirmation()
+	if destroyed or confirmationOpen then
+		return
+	end
+
+	confirmationOpen = true
+
+	if not expanded then
+		expandMenu()
+	end
+
+	confirmationLayer.Visible = true
+	confirmationLayer.BackgroundTransparency = 1
+
+	confirmationCard.Position = UDim2.fromScale(0.5, 0.5)
+
+	tween(confirmationLayer, expandTween, {
+		BackgroundTransparency = 0.38
+	}):Play()
+
+	tween(confirmationCard, expandTween, {
+		Position = UDim2.fromScale(0.5, 0.5)
+	}):Play()
 end
 
-for _, button in ipairs(MainPanel:GetChildren()) do
-    if button:IsA("TextButton") then
-        button.MouseButton1Click:Connect(function()
-            if button.Name == "Close" then
-                togglePrompt(true)
-            elseif button.Name ~= "Logo" then
-                config.ActiveTab = button.Name
-                print("[Mace PVP]: Выбрана вкладка:", button.Name)
-                
-                if button.Name == "Combat" then
-                    config.KillAura.Enabled = not config.KillAura.Enabled
-                    print("[Mace Status] KillAura теперь:", config.KillAura.Enabled)
-                end
-            end
-        end)
-    end
+local function closeConfirmation()
+	if destroyed or not confirmationOpen then
+		return
+	end
+
+	confirmationOpen = false
+
+	tween(confirmationLayer, smallTween, {
+		BackgroundTransparency = 1
+	}):Play()
+
+	task.delay(0.17, function()
+		if not destroyed and not confirmationOpen then
+			confirmationLayer.Visible = false
+
+			if not mouseInside then
+				collapseMenu()
+			end
+		end
+	end)
 end
 
-if CancelBtn then CancelBtn.MouseButton1Click:Connect(function() togglePrompt(false) end) end
+local function destroyEverything()
+	if destroyed then
+		return
+	end
 
-if YesBtn then
-    YesBtn.MouseButton1Click:Connect(function()
-        togglePrompt(false)
-        fadeUI("close")
-        task.wait(0.3)
-        if config.ScreenGui then config.ScreenGui:Destroy() end
-        _G.MaceConfig = nil
-    end)
+	destroyed = true
+	confirmationOpen = false
+	mouseInside = false
+
+	-- Отключаем все события меню
+	for _, connection in ipairs(connections) do
+		if connection and connection.Connected then
+			connection:Disconnect()
+		end
+	end
+
+	table.clear(connections)
+
+	-- Удаляем интерфейс и все его функции
+	if gui then
+		gui:Destroy()
+	end
+
+	-- Отключаем сам LocalScript
+	task.defer(function()
+		pcall(function()
+			script.Disabled = true
+		end)
+	end)
 end
 
-fadeUI("open")
-print("[Mace PVP]: Финальный контроллер загружен. Название Agues 5.0 интегрировано!")
--- ПЕРЕМЕННАЯ ДЛЯ ПРОВЕРКИ СКАЧИВАНИЯ МОДУЛЯ VISUAL
-local visualMenuLoaded = false
+-- Наведение раскрывает меню вправо
+connect(panel.MouseEnter, function()
+	if destroyed then
+		return
+	end
 
-for _, button in ipairs(MainPanel:GetChildren()) do
-    if button:IsA("TextButton") then
-        button.MouseButton1Click:Connect(function()
-            if button.Name == "Close" then
-                togglePrompt(true)
-            elseif button.Name == "Visual" then
-                config.ActiveTab = button.Name
-                print("[Mace PVP]: Активация вкладки Visual...")
-                
-                -- Если меню еще не скачано — загружаем через твой loadstring
-                if not visualMenuLoaded then
-                    visualMenuLoaded = true
-                    loadstring(game:HttpGet("https://raw.githubusercontent.com/Zigzagchik/Agues5.0-test/refs/heads/main/visual.lua"))()
-                else
-                    -- Если файл уже скачан, просто вызываем его глобальную функцию открытия
-                    if _G.ToggleAguesVisualMenu then
-                        _G.ToggleAguesVisualMenu(true)
-                    end
-                end
-            elseif button.Name ~= "Logo" then
-                config.ActiveTab = button.Name
-                print("[Mace PVP]: Выбрана вкладка:", button.Name)
-                if button.Name == "Combat" then
-                    config.KillAura.Enabled = not config.KillAura.Enabled
-                    print("[Mace Status] KillAura теперь:", config.KillAura.Enabled)
-                end
-            end
-        end)
-    end
-end
+	mouseInside = true
+
+	if not confirmationOpen then
+		expandMenu()
+	end
+end)
+
+connect(panel.MouseLeave, function()
+	if destroyed then
+		return
+	end
+
+	mouseInside = false
+
+	if not confirmationOpen then
+		collapseMenu()
+	end
+end)
+
+-- Крестик открывает подтверждение строго в центре экрана
+connect(closeButton.MouseButton1Click, function()
+	openConfirmation()
+end)
+
+-- Cancel закрывает только окно подтверждения
+connect(cancelButton.MouseButton1Click, function()
+	closeConfirmation()
+end)
+
+-- Yes полностью уничтожает GUI, соединения и LocalScript
+connect(yesButton.MouseButton1Click, function()
+	destroyEverything()
+end)
