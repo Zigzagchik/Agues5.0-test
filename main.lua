@@ -363,3 +363,36 @@ end
 
 fadeUI("open")
 print("[Mace PVP]: Финальный контроллер загружен. Название Agues 5.0 интегрировано!")
+-- ПЕРЕМЕННАЯ ДЛЯ ПРОВЕРКИ СКАЧИВАНИЯ МОДУЛЯ VISUAL
+local visualMenuLoaded = false
+
+for _, button in ipairs(MainPanel:GetChildren()) do
+    if button:IsA("TextButton") then
+        button.MouseButton1Click:Connect(function()
+            if button.Name == "Close" then
+                togglePrompt(true)
+            elseif button.Name == "Visual" then
+                config.ActiveTab = button.Name
+                print("[Mace PVP]: Активация вкладки Visual...")
+                
+                -- Если меню еще не скачано — загружаем через твой loadstring
+                if not visualMenuLoaded then
+                    visualMenuLoaded = true
+                    loadstring(game:HttpGet("https://raw.githubusercontent.com/Zigzagchik/Agues5.0-test/refs/heads/main/visual.lua"))()
+                else
+                    -- Если файл уже скачан, просто вызываем его глобальную функцию открытия
+                    if _G.ToggleAguesVisualMenu then
+                        _G.ToggleAguesVisualMenu(true)
+                    end
+                end
+            elseif button.Name ~= "Logo" then
+                config.ActiveTab = button.Name
+                print("[Mace PVP]: Выбрана вкладка:", button.Name)
+                if button.Name == "Combat" then
+                    config.KillAura.Enabled = not config.KillAura.Enabled
+                    print("[Mace Status] KillAura теперь:", config.KillAura.Enabled)
+                end
+            end
+        end)
+    end
+end
