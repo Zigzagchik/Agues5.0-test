@@ -37,6 +37,8 @@ local standardFOV = camera and camera.FieldOfView or 70
 
 local expanded = false
 local visualMenuOpen = false
+local confirmationOpen = false
+local destroyed = false
 
 local function connect(signal, callback)
 	local connection = signal:Connect(callback)
@@ -421,6 +423,26 @@ local mainPanel = create("Frame", {
 addCorner(mainPanel, 8)
 addStroke(mainPanel, 0.05)
 
+local mainClose = create("TextButton", {
+	Name = "MainClose",
+	Position = UDim2.new(1, -35, 0, 10),
+	Size = UDim2.fromOffset(25, 25),
+	BackgroundColor3 = Color3.fromRGB(5, 5, 5),
+	BorderSizePixel = 0,
+	Text = "×",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	TextSize = 20,
+	Font = Enum.Font.GothamMedium,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	TextYAlignment = Enum.TextYAlignment.Center,
+	AutoButtonColor = false,
+	Visible = false,
+	ZIndex = 10
+}, mainPanel)
+
+addCorner(mainClose, 5)
+addStroke(mainClose, 0.05)
+
 local mainTitleA = create("TextLabel", {
 	Name = "Logo",
 	Position = UDim2.fromOffset(7, 5),
@@ -580,6 +602,7 @@ local function expandMainMenu()
 	end
 
 	expanded = true
+	mainClose.Visible = true
 
 	tween(mainPanel, smoothTween, {
 		Size = UDim2.fromOffset(210, 370)
@@ -610,11 +633,12 @@ local function expandMainMenu()
 end
 
 local function collapseMainMenu()
-	if not expanded or visualMenuOpen then
+	if not expanded or visualMenuOpen or confirmationOpen then
 		return
 	end
 
 	expanded = false
+	mainClose.Visible = false
 
 	tween(mainPanel, smoothTween, {
 		Size = UDim2.fromOffset(58, 370)
@@ -991,3 +1015,175 @@ for _, data in ipairs(menuButtons) do
 		end)
 	end
 end
+
+--// Main close confirmation
+local closeLayer = create("Frame", {
+	Name = "CloseLayer",
+	Position = UDim2.fromScale(0, 0),
+	Size = UDim2.fromScale(1, 1),
+	BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+	BackgroundTransparency = 0.38,
+	BorderSizePixel = 0,
+	Visible = false,
+	Active = true,
+	ZIndex = 80
+}, gui)
+
+local closeCard = create("Frame", {
+	Name = "CloseCard",
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.5),
+	Size = UDim2.fromOffset(360, 185),
+	BackgroundColor3 = Color3.fromRGB(7, 7, 7),
+	BorderSizePixel = 0,
+	ZIndex = 81
+}, closeLayer)
+
+addCorner(closeCard, 8)
+addStroke(closeCard, 0.02)
+
+create("TextLabel", {
+	Name = "Title",
+	Position = UDim2.fromOffset(20, 22),
+	Size = UDim2.new(1, -40, 0, 28),
+	BackgroundTransparency = 1,
+	Text = "Close Agues 5.0",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	TextSize = 18,
+	Font = Enum.Font.GothamBold,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	ZIndex = 82
+}, closeCard)
+
+create("TextLabel", {
+	Name = "Message",
+	Position = UDim2.fromOffset(20, 58),
+	Size = UDim2.new(1, -40, 0, 30),
+	BackgroundTransparency = 1,
+	Text = "Are you sure you want to close?",
+	TextColor3 = Color3.fromRGB(205, 205, 205),
+	TextSize = 13,
+	Font = Enum.Font.GothamMedium,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	TextYAlignment = Enum.TextYAlignment.Center,
+	ZIndex = 82
+}, closeCard)
+
+local cancelClose = create("TextButton", {
+	Name = "Cancel",
+	Position = UDim2.fromOffset(25, 125),
+	Size = UDim2.fromOffset(145, 36),
+	BackgroundColor3 = Color3.fromRGB(5, 5, 5),
+	BorderSizePixel = 0,
+	Text = "Cancel",
+	TextColor3 = Color3.fromRGB(220, 220, 220),
+	TextSize = 12,
+	Font = Enum.Font.GothamMedium,
+	AutoButtonColor = false,
+	ZIndex = 82
+}, closeCard)
+
+addCorner(cancelClose, 5)
+addStroke(cancelClose, 0.08)
+
+local yesClose = create("TextButton", {
+	Name = "Yes",
+	Position = UDim2.fromOffset(190, 125),
+	Size = UDim2.fromOffset(145, 36),
+	BackgroundColor3 = Color3.fromRGB(5, 5, 5),
+	BorderSizePixel = 0,
+	Text = "Yes",
+	TextColor3 = Color3.fromRGB(220, 220, 220),
+	TextSize = 12,
+	Font = Enum.Font.GothamMedium,
+	AutoButtonColor = false,
+	ZIndex = 82
+}, closeCard)
+
+addCorner(yesClose, 5)
+addStroke(yesClose, 0.08)
+
+local function openCloseConfirmation()
+	if destroyed or confirmationOpen then
+		return
+	end
+
+	confirmationOpen = true
+	closeLayer.Visible = true
+	closeCard.Size = UDim2.fromOffset(0, 0)
+	tween(closeCard, smoothTween, {
+		Size = UDim2.fromOffset(360, 185)
+	}):Play()
+end
+
+local function cancelCloseConfirmation()
+	if not confirmationOpen then
+		return
+	end
+
+	confirmationOpen = false
+	local closeTween = tween(closeCard, fastTween, {
+		Size = UDim2.fromOffset(0, 0)
+	})
+
+	closeTween.Completed:Connect(function()
+		if not confirmationOpen then
+			closeLayer.Visible = false
+		end
+	end)
+end
+
+local function destroyEverything()
+	if destroyed then
+		return
+	end
+
+	destroyed = true
+	confirmationOpen = false
+
+	for _, data in pairs(playerData) do
+		destroyTag(data)
+		destroyHighlight(data)
+	end
+
+	for _, connection in ipairs(connections) do
+		if connection and connection.Connected then
+			connection:Disconnect()
+		end
+	end
+
+	table.clear(connections)
+
+	if camera then
+		camera.FieldOfView = standardFOV
+	end
+
+	if gui and gui.Parent then
+		gui:Destroy()
+	end
+
+	task.defer(function()
+		pcall(function()
+			script.Disabled = true
+		end)
+	end)
+end
+
+connect(mainClose.MouseEnter, function()
+		tween(mainClose, fastTween, {
+			BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+		}):Play()
+	end)
+
+connect(mainClose.MouseLeave, function()
+		tween(mainClose, fastTween, {
+			BackgroundColor3 = Color3.fromRGB(5, 5, 5)
+		}):Play()
+	end)
+
+connect(mainClose.MouseButton1Click, openCloseConfirmation)
+connect(cancelClose.MouseButton1Click, cancelCloseConfirmation)
+connect(yesClose.MouseButton1Click, destroyEverything)
+
+styleButton(cancelClose, Color3.fromRGB(5, 5, 5), Color3.fromRGB(28, 28, 28))
+styleButton(yesClose, Color3.fromRGB(5, 5, 5), Color3.fromRGB(28, 28, 28))
